@@ -1,0 +1,14 @@
+4/11/26
+-Declaración de las funciones allocate,deallocate y memory en el archivo memoria.h
+-Incluimos el archivo memoria.h en p2.c mediante #include "memoria.h"
+-Preparamos las tres funciones de memoria.c, dejando para despues el cuerpo de cada función
+-Modificamos el Makefile para que se ajuste a nuestra estructura de archivos
+-Definimos la estructura de un bloque de memoria en el archivo listaMemoria.h
+-Definimos nuestra lista enlazada simple en listaMemoria.h. Creamos NodoMemoria que representa a un elemento de nuestra lista y  ListaMemoria que
+representa la lista completa
+- En listaMemoria.c creamos una funcion que recibe un puntero a una lista de memoria y en el cuerpo indicamos que la lista empieza vacia
+
+
+5/11/26
+
+
