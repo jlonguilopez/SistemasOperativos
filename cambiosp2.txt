@@ -10,5 +10,8 @@ representa la lista completa
 
 
 5/11/26
+- Programamos las operaciones básicas de la lista de memoria en listaMemoria.c: inicializarListaMemoria, insertarBloqueMemoria, buscarBloqueMemoria, eliminarBloqueMemoria, vaciarListaMemoria
+- Implementamos la funcion inicializarMemoria en memoria.c y la ponemos en el main de p2.c
+- Implementamos allocate -malloc y deallocate -malloc en memoria.c
 
 

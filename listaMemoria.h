@@ -2,6 +2,7 @@
 #ifndef LISTAMEMORIA_H
 #define LISTAMEMORIA_H
 
+
 #include <stddef.h>
 #include <time.h>
 
@@ -13,7 +14,7 @@ typedef struct{
     char tipo[16];      //Tipo de memoria(malloc,shared,mmap)
     int clave;          //Clave de memoria compartida
     int descriptor;     //Descriptor de fichero
-    char fichero[256]   //Nombre del fichero 
+    char fichero[256];   //Nombre del fichero 
 
 
 
@@ -26,7 +27,7 @@ typedef struct{
 //Usamos una lista enlazada simple que nos permita agregar y eliminar bloques de memoria sin poner un limite fijo
 
 
-typdef struct NodoMemoria {     //NodoMemoria representa un elemento de nuestra lista
+typedef struct NodoMemoria {     //NodoMemoria representa un elemento de nuestra lista
 
     BloqueMemoria bloque;               //"bloque" es toda la informacion de una reserva de memoria (tamano,fecha,descriptor...)
     struct NodoMemoria *siguiente;      //"siguiente" es un puntero al siguiente nodo de la lista
@@ -44,6 +45,18 @@ typedef struct {                //ListaMemoria representa la lista completa.
 
 
 
+//Prototipos
+
 void inicializarListaMemoria(ListaMemoria *lista);
+
+int insertarBloqueMemoria(ListaMemoria *lista, BloqueMemoria bloque);
+
+NodoMemoria *buscarBloqueMemoria(ListaMemoria *lista, void *direccion);
+
+int eliminarBloqueMemoria(ListaMemoria *lista, void *direccion);
+
+void vaciarListaMemoria(ListaMemoria *lista);
+
+void mostrarBloquesMemoria(ListaMemoria *lista);
 
 #endif

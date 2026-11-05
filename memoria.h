@@ -7,4 +7,7 @@ void Cmd_allocate(char *trozos[]);
 void Cmd_deallocate(char *trozos[]);
 void Cmd_memory(char *trozos[]);
 
+
+void inicializarMemoria(void);
+
 #endif

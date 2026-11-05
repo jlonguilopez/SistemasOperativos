@@ -88,6 +88,9 @@ struct COMANDO comandos[] = {   //ponemos cada comando, su funcion y su informac
   {"deltree", Cmd_deltree, "n1 n2 ...\tBorra ficheros o directorios con todo lo que tengan dentro"},
   {"listfile",Cmd_listfile,"[-long][-link][-acc] n1 n2 ...\tInformacion de ficheros o directorios"},
   {"list",    Cmd_list,    "[-reca][-recb][-hid][-long][-link][-acc] n1 n2 ...\tLista el contenido de directorios"},
+  {"allocate", Cmd_allocate, "[-malloc|-shared|-createshared|-mmap] ...\tAsigna memoria"},
+  {"deallocate", Cmd_deallocate, "[-malloc|-shared|-delkey|-mmap|addr] ...\tDesasigna memoria"},
+  {"memory", Cmd_memory, "[-blocks|-funcs|-vars|-all|-pmap]\tMuestra informacion de memoria"},
   {NULL, NULL, NULL}  //marcamos el final de la tabla con los NULL para que sepa el bucle donde termina la tabla 
 };
 
@@ -814,6 +817,8 @@ int main () {
   char *trozos [MAX_TEXT/2 + 1];  //array donde guardamos las palabras troceadas. como mucho hay MAX_TEXT/2 palabras, y +1 para el NULL del final
   int i;    //indice para recorrer la tabla de comandos
   InicializarAbiertos();   //metemos 0, 1 y 2 en la lista antes de empezar
+
+  inicializarMemoria();   //Inicializamos la lista de bloques de memoria
     
   //Bucle principal del shell (infinito: solo se sale con exit/bye, que llaman a exit(0), o con Ctrl+D)
   while (1) {
