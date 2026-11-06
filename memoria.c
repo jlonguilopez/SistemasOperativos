@@ -178,6 +178,14 @@ static void *mapearFichero(char *fichero, int proteccion, int *descriptor, size_
 //Se encarga de reservar memoria
 void Cmd_allocate(char *trozos[]){
 
+    //Si el usuario escribe allocate sin argumentos, mostramos los bloques de memoria
+    if(trozos[1] == NULL){
+        mostrarBloquesMemoria(&lista);
+        return;
+    }
+
+
+
     //allocate -malloc:
 
         size_t tamano;      // Cant. de bytes que queremos reservar
@@ -356,46 +364,49 @@ void Cmd_allocate(char *trozos[]){
 
 
     ///allocate -mmap
-        //Mapea un fichero en memoria con los permisos indicados
+        //Mapea un fichero en memoria con los permisos indicados por el usuario
 
         if (trozos[1] != NULL && strcmp(trozos[1], "-mmap") == 0) {
 
-            char *fichero;
+            char *fichero;                  //Nombre del archivo que queremos mapear
             char *permisos;
-            int proteccion = 0;
+            int proteccion = 0;             //Almacena los permisos de memoria
             int descriptor;
             size_t tamano;
-            void *direccion;
+            void *direccion;                //Direccion donde se mapeara el fichero
             BloqueMemoria bloque = {0};
 
     
+            //Si el usuario no indico un fichero, mostramos un mensaje de error
             if (trozos[2] == NULL) {
                 printf("Uso: allocate -mmap fichero permisos\n");
                 return;
             }
 
+            //Obtenemos el nombre del fichero y los permisos del mismo, y los guardamos
             fichero = trozos[2];
             permisos = trozos[3];
 
             //Interpretamos los permisos indicados por el usuario
             if (permisos != NULL && strlen(permisos) < 4) {
 
-                if (strchr(permisos, 'r') != NULL) {
+                if (strchr(permisos, 'r') != NULL) {        //Busca el caracter r y si lo encuentra añade permisos de lectura
 
                     proteccion |= PROT_READ;
                 }
 
-                if (strchr(permisos, 'w') != NULL) {
+                if (strchr(permisos, 'w') != NULL) {        //Busca el caracter w y si lo encuentra añade permisos de escritura
                     proteccion |= PROT_WRITE;
                 }
 
-                if (strchr(permisos, 'x') != NULL) {
+                if (strchr(permisos, 'x') != NULL) {        //Busca el caracter x y si lo encuentra añade permisos de ejecucion
                     proteccion |= PROT_EXEC;
                 }
             }       
 
             //Mapeamos el fichero utilizando la funcion 
             direccion = mapearFichero(fichero, proteccion, &descriptor, &tamano);
+
 
             if (direccion == NULL) {
                 
@@ -409,10 +420,12 @@ void Cmd_allocate(char *trozos[]){
             strcpy(bloque.tipo, "mmap");
             bloque.descriptor = descriptor;
 
-            strncpy(bloque.fichero, fichero, sizeof(bloque.fichero) - 1);
+            strncpy(bloque.fichero, fichero, sizeof(bloque.fichero) - 1);   //Copiamos el nombre del fichero a la estructura
+
 
             if (!insertarBloqueMemoria(&lista, bloque)) {
 
+            //Si falla la insercion, deshacemos el mapeo de memoria y cerramos el descriptor del fichero
             munmap(direccion, tamano);
             close(descriptor);
 
@@ -435,6 +448,15 @@ void Cmd_allocate(char *trozos[]){
 
 //Se encarga de liberar memoria
 void Cmd_deallocate(char *trozos[]){
+
+
+    //Si el usuario escribe deallocate sin ningun parametro, mostramos los bloques de memoria
+    if (trozos[1] == NULL){
+        mostrarBloquesMemoria(&lista);
+        return;
+    }
+
+
 
     //deallocate -malloc
         size_t tamano;
@@ -574,6 +596,61 @@ void Cmd_deallocate(char *trozos[]){
             printf("Clave %d eliminada del sistema\n", (int) clave);
             return;
 
+
+        }
+
+
+    //deallocate -mmap
+        //Desmapea un fichero y elimina su informacion de la lista
+        
+        if (trozos[1] != NULL && strcmp(trozos[1],"-mmap") == 0){
+
+            char *fichero;
+            NodoMemoria *actual;
+
+            if(trozos[2] == NULL){
+                printf("Uso: deallocate -mmap fichero\n");
+                return;
+            }
+
+            fichero = trozos[2];
+            actual = lista.primero;
+
+            while (actual != NULL){
+
+                //Recorremos la lista comprobando que el bloque sea de tipo mmap y que le nombre del fichero coincida
+                if (strcmp(actual->bloque.tipo,"mmap") == 0 && strcmp(actual->bloque.fichero,fichero) == 0){
+
+                    //Obtenemos la informacion del bloque y guardamos los datos
+                    void *direccion = actual->bloque.direccion;
+                    size_t tamano = actual->bloque.tamano;      //Tamano del mapeo en bytes
+                    int descriptor = actual->bloque.descriptor;
+
+
+                    //Desmapeamos el fichero mediante la direccion donde comienza el mapeo y el numero de bytes que queremos desmapear. Si falla el desmapeo mandamos un error
+                    if (munmap(direccion,tamano) == -1){
+                        perror("Error al desmapear el fichero");
+                        return;
+                    }
+
+                    
+                    //Cerramos el descriptor
+                    if(close(descriptor) == -1){
+                        perror("Error al cerrar el fichero");
+                    }
+
+                    eliminarBloqueMemoria(&lista,direccion);
+
+                    printf("Fichero %s desmapeado correctamente\n",fichero);
+                    return;
+
+                }
+
+                actual = actual->siguiente;
+            }
+
+            printf("No se encontro el fichero %s mapeado en memoria\n",fichero);
+            return;
 
         }
 
