@@ -2,6 +2,8 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
+#include <time.h>
 
 void inicializarListaMemoria(ListaMemoria *lista){      //La funcion recibe un puntero a una lista de memoria para modificarla
 
@@ -112,6 +114,28 @@ void vaciarListaMemoria(ListaMemoria *lista){
 
 
     lista->primero = NULL;          //Indicamos la lista como vacia
+}
+
+
+//Funcion que recorre la lista y muestra la información de todos los bloques registrados
+void mostrarBloquesMemoria(ListaMemoria *lista){
+    
+
+    NodoMemoria *actual = lista->primero;   
+
+    while (actual != NULL){
+
+        //Obtenemos el bloque de memoria almacenado en el nodo actual
+        BloqueMemoria *bloque = &actual->bloque;    //Usamos & porque queremos acceder directamente al bloque original
+
+        char *fecha = ctime(&bloque->fecha);    //Convertimos la fecha en texto, encontramos la posicion del salto de linea, sustituimos ese salto por el final de la cadena y mostramos todo en una sola linea
+        fecha[strcspn(fecha, "\n")] = '\0';
+
+        //Mostramos la información del bloque de memoria(Su direccion de memoria, el tamano del bloque en bytes,la fecha en la que se reservo la memoria para ese bloque y el tipo de memoria)
+        printf("%p %zu bytes %s %s\n", bloque->direccion, bloque->tamano, fecha,bloque->tipo);
+
+        actual = actual->siguiente;
+    }
 }
 
 
