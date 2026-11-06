@@ -6,6 +6,11 @@
 #include <sys/ipc.h>        //Proporciona las claves y constantes para comunicacion entre procesos
 #include <sys/shm.h>        //Declara las funciones de memoria compartida
 
+#include <sys/mman.h>   // mmap() y munmap()
+#include <sys/stat.h>   // stat()
+#include <fcntl.h>      // open(), O_RDONLY y O_RDWR
+#include <unistd.h>     // close()
+
 #include "memoria.h"
 #include "listaMemoria.h"
 
@@ -100,7 +105,69 @@ static void *conectarMemoriaCompartida(key_t clave, size_t *tamano){        //la
 
 
 
-}         
+}
+
+
+
+//Funcion que mapea un fichero de memoria. (permite acceder al contenido de un archivo como si estuviera en la RAM)
+static void *mapearFichero(char *fichero, int proteccion, int *descriptor, size_t *tamano){
+
+    int fd;                 //Descriptor del fichero
+    int modo = O_RDONLY;    //Modo de apertura, inicialmente solo lectura
+    struct stat datos;      //Estructura que almacena informacion del fichero
+    void *direccion;        //Puntero a la memoria mapeada
+
+    //Comprobamos si se ha solicitado permiso de escritura
+    if (proteccion & PROT_WRITE){
+        modo = O_RDWR;
+    }
+
+
+    //Consultamos informacion del fichero, si falla devovvlemos error
+    if (stat(fichero, &datos) == -1){
+        perror("Error al consultar el fichero");
+        return NULL;
+    }
+
+
+    //Comprobamos que el fichero no este vacio, si lo esta(0 bytes) mandamos un mensaje de error
+    if (datos.st_size == 0) {
+
+        printf("No se puede mapear un fichero vacio\n");
+        return NULL;
+    }
+
+    //Abrimos el fichero utilizando los permisos establecidos anteriormente
+    fd = open(fichero,modo);
+
+
+    //Si no consigue abrirlo lanza un mensaje de error
+    if (fd == -1){
+        perror("Error al abrir el fichero");
+        return NULL;
+    }
+
+
+    //Creamos un mapeo del contenido del fichero en el espacio de memoria del proceso
+    direccion = mmap(NULL, datos.st_size, proteccion,MAP_PRIVATE,fd,0);         //MAP_PRIVATE significa que si modificamos la memoria mapeada, los cambios no se guardaran en el archivp original
+
+
+    //Si mmap falla, devolvvemos un error y cerramos el descriptor
+    if (direccion == MAP_FAILED){
+        perror("Error al mapear el fichero");
+        close(fd);
+        return NULL;
+    }
+
+    //Guardamos el descriptor y el tamano
+    *descriptor = fd;
+    *tamano = (size_t) datos.st_size;
+
+
+    //Devolvvemos la direccion de la memoria mapeada
+    return direccion;
+
+}   
 
 
 
@@ -286,6 +353,77 @@ void Cmd_allocate(char *trozos[]){
 
 
         }
+
+
+    ///allocate -mmap
+        //Mapea un fichero en memoria con los permisos indicados
+
+        if (trozos[1] != NULL && strcmp(trozos[1], "-mmap") == 0) {
+
+            char *fichero;
+            char *permisos;
+            int proteccion = 0;
+            int descriptor;
+            size_t tamano;
+            void *direccion;
+            BloqueMemoria bloque = {0};
+
+    
+            if (trozos[2] == NULL) {
+                printf("Uso: allocate -mmap fichero permisos\n");
+                return;
+            }
+
+            fichero = trozos[2];
+            permisos = trozos[3];
+
+            //Interpretamos los permisos indicados por el usuario
+            if (permisos != NULL && strlen(permisos) < 4) {
+
+                if (strchr(permisos, 'r') != NULL) {
+
+                    proteccion |= PROT_READ;
+                }
+
+                if (strchr(permisos, 'w') != NULL) {
+                    proteccion |= PROT_WRITE;
+                }
+
+                if (strchr(permisos, 'x') != NULL) {
+                    proteccion |= PROT_EXEC;
+                }
+            }       
+
+            //Mapeamos el fichero utilizando la funcion 
+            direccion = mapearFichero(fichero, proteccion, &descriptor, &tamano);
+
+            if (direccion == NULL) {
+                
+                return;
+            }
+
+            //Guardamos la informacion del bloque
+            bloque.direccion = direccion;
+            bloque.tamano = tamano;
+            bloque.fecha = time(NULL);
+            strcpy(bloque.tipo, "mmap");
+            bloque.descriptor = descriptor;
+
+            strncpy(bloque.fichero, fichero, sizeof(bloque.fichero) - 1);
+
+            if (!insertarBloqueMemoria(&lista, bloque)) {
+
+            munmap(direccion, tamano);
+            close(descriptor);
+
+            printf("Error al registrar el bloque de memoria\n");
+            return;
+            }
+
+
+    printf("Fichero %s mapeado en %p (%zu bytes)\n",fichero, direccion, tamano);
+    return;
+}
         
         
 
