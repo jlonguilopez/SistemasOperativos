@@ -20,16 +20,66 @@
 
 static ListaMemoria lista;  //static hace que lista solo sea accesible desde memoria.c
 
-
 //Variables globales con enlace externo para memory -vars
 int externa1 = 10;
 int externa2 = 20;
 int externa3;
 
+
+
+
+
 //Inicializamos la variable lista que hemos creado
 void inicializarMemoria(void){
 
     inicializarListaMemoria(&lista);    // Utilizamos la funcion de listaMemoria.c
+}
+
+
+
+//Funcion con la que liberamos todos los bloques de memoria que han sido registrados
+void liberarMemoria(void){
+
+    NodoMemoria *actual = lista.primero;    //Declaramos un puntero llamado "actual" y hacemos que apunte al primer nodo de la lista
+
+
+    
+    while (actual != NULL){
+
+        //Comprobamos primero el tipo de memoria para liberarla correctamente
+        if(strcmp(actual->bloque.tipo, "malloc") == 0){
+
+            free(actual->bloque.direccion); //Si el bloque es de tipo malloc, liberamos la memoria dinamica que habiamos reservado antes
+        }
+
+
+        else if(strcmp(actual->bloque.tipo, "shared") == 0){
+            if (shmdt(actual->bloque.direccion) == -1){         //Si el bloque es memoria compartida, desconectamos el segmento de memoria compartida de nuestra shell con shmdt
+
+                perror("Error al desconectar memoria compartida");
+            }
+        }
+
+
+        else if (strcmp(actual->bloque.tipo, "mmap") == 0) {    //Si el bloque es de tipo mmap deshacemos el mapeo del fichero en memoria
+
+            if (munmap(actual->bloque.direccion,
+                       actual->bloque.tamano) == -1) {
+
+                perror("Error al desmapear fichero");
+            }
+
+            if (close(actual->bloque.descriptor) == -1) {   //Cerramos el descriptor del fichero
+                perror("Error al cerrar descriptor");
+            }
+        }
+
+        actual = actual->siguiente;
+    }
+
+
+    //Eliminamos todos los nodos de nuestra lista
+    vaciarListaMemoria(&lista);
 }
 
 
@@ -440,8 +490,293 @@ static ssize_t escribirFichero(char *fichero, void *direccion,size_t cantidad, i
 
     printf("Leidos %zd bytes del descriptor %d en %p\n",leidos, descriptor, direccion);
 
-    
+
 }
+
+
+//Comando write
+    //Escribe bytes de memoria en un descriptor de fichero abierto
+
+        void Cmd_write(char *trozos[]) {
+
+            int descriptor;
+            void *direccion = NULL;
+            size_t cantidad;
+            ssize_t escritos;
+            char *fin;
+
+            
+            if (trozos[1] == NULL || trozos[2] == NULL || trozos[3] == NULL) {
+
+                printf("Uso: write descriptor direccion cantidad\n");
+                return;
+            }
+
+            
+            descriptor = (int) strtol(trozos[1], &fin, 10); //Convertimos el descriptor a un numero entero
+
+
+            if (*fin != '\0' || descriptor < 0) {
+
+                printf("Descriptor no valido\n");
+                return;
+            }
+
+            //Convertimos la direccion escrita por el usuario a un puntero
+            if (sscanf(trozos[2], "%p", &direccion) != 1) {
+
+                printf("Direccion de memoria no valida\n");
+                return;
+
+
+            }
+
+            //Convertimos la cantidad de bytes a un numero
+            cantidad = strtoull(trozos[3], NULL, 10);
+
+
+
+            //Escribimos los bytes desde memoria al descriptor
+            escritos = write(descriptor, direccion, cantidad);
+
+
+
+            if (escritos == -1) {
+
+                perror("Error al escribir en el descriptor");
+                return;
+
+            }
+
+
+
+            printf("Escritos %zd bytes desde %p en el descriptor %d\n", escritos, direccion, descriptor);
+}
+
+
+
+
+    //Funcion que rellena una zona de memoria con un byte
+    static void llenarMemoria(void *direccion, size_t cantidad,unsigned char byte) {
+
+    unsigned char *p = (unsigned char *) direccion; //Convertimos la dirección a un puntero de tipo unsigned char porque queremos trabajar byte a byte.
+    size_t i;
+
+    for (i = 0; i < cantidad; i++) {
+
+        p[i] = byte;
+    }
+}
+
+    //memfill
+        //Comando que rellena una cantidad de bytes con un valor hexadecimal
+        void Cmd_memfill(char *trozos[]) {
+
+            void *direccion = NULL;
+            size_t cantidad;
+            unsigned long valor;
+            char *fin;
+
+            
+            if (trozos[1] == NULL || trozos[2] == NULL || trozos[3] == NULL){
+
+                printf("Uso: memfill direccion cantidad valor_hexadecimal\n");
+                return;
+            }
+
+            
+            if(sscanf(trozos[1], "%p", &direccion) != 1){
+
+                printf("Direccion de memoria no valida\n");
+
+                return;
+            }
+
+            //Convertimos la cantidad de bytes
+            cantidad = strtoull(trozos[2], &fin, 10);
+
+            if (*fin != '\0') {
+
+                printf("Cantidad no valida\n");
+
+
+                return;
+            }
+
+            //Convertimos el valor hexadecimal a un numero
+            valor = strtoul(trozos[3], &fin, 16);
+
+            if (*fin != '\0' || valor > 255) {
+
+                printf("Valor hexadecimal no valido\n");
+
+                return;
+            }
+
+
+
+            //Rellenamos la memoria con la funcion de antes
+            llenarMemoria(direccion, cantidad, (unsigned char) valor);
+
+    printf("Rellenados %zu bytes en %p con el valor %02lX\n",cantidad, direccion, valor);
+
+
+}
+
+
+
+
+    //memdump
+        //Comando que muestra el contenido de una zona de memoria en caracteres y hexadecimal
+
+        void Cmd_memdump(char *trozos[]){
+
+            void *direccion = NULL;
+            size_t cantidad;
+            size_t i;
+            unsigned char *p;
+            char *fin;
+
+    
+
+
+
+        if (trozos[1] == NULL || trozos[2] == NULL){
+
+            printf("Uso: memdump direccion cantidad\n");
+
+            return;
+
+        }
+
+
+    
+        if(sscanf(trozos[1], "%p", &direccion) != 1){
+
+        printf("Direccion de memoria no valida\n");
+
+        return;
+        }
+
+
+        //Convertimos la cantidad de bytes
+        cantidad = strtoull(trozos[2], &fin, 10);
+
+        if (*fin != '\0'){
+            printf("Cantidad no valida\n");
+            return;
+
+        }
+
+
+        //Convertimos la direccion en un puntero a bytes
+        p = (unsigned char *) direccion;
+
+
+        //Mostramos los bytes en grupos de 16
+        for (i = 0; i < cantidad; i += 16){
+
+            size_t j;
+            size_t n = cantidad - i;
+
+
+            if (n > 16) {
+
+                n = 16;
+            }
+
+            
+            printf("Caracteres:  ");
+
+
+            for (j = 0; j < n; j++){
+
+                unsigned char byte = p[i + j];
+
+                if (byte >= 32 && byte <= 126) {
+                    printf(" %c ", byte);
+
+                } 
+                else{
+
+                printf(" . ");
+                }
+
+            }
+
+            printf("\n");
+
+            //Mostramos los valores hexadecimales
+            printf("Hexadecimal: ");
+
+            for (j = 0; j < n; j++){
+
+            printf("%02X ", p[i + j]);
+            }
+
+
+
+        printf("\n\n");
+
+    }
+
+
+
+
+}
+
+
+
+
+#define TAMANO_RECURSIVA 2048
+
+    //Funcion recursiva que muestra las direcciones de memoria
+    static void recursiva(int n) {
+
+        char automatico[TAMANO_RECURSIVA];
+        static char estatico[TAMANO_RECURSIVA];
+
+
+        //Ddirecciones de las variables
+        printf("Parametro: %3d (%p), array automatico: %p, array estatico: %p\n", n, (void *) &n, (void *) automatico, (void *) estatico);
+
+        //Si n es mayor que 0, volvemos a llamar a la funcion
+        if (n > 0){
+
+            recursiva(n - 1);
+        }
+    }
+
+
+    //recurse. Comando que realiza llamadas recursivas y muestra las direcciones de memoria de el parametro de la funcion, un array automatico y un array estatico
+    void Cmd_recurse(char *trozos[]) {
+
+        int n;
+        char *fin;
+
+        //Comprobamos que el usuario haya indicado un numero
+        if (trozos[1] == NULL){
+            printf("Uso: recurse n\n");
+            return;
+        }
+
+        
+        n = (int) strtol(trozos[1], &fin, 10);
+
+        if (*fin != '\0' || n < 0){
+
+        printf("Numero de llamadas no valido\n");
+        return;
+        }
+
+
+
+    //Llamamos a la funcion recursiva
+    recursiva(n);}
+    
+
+
+
 
 
 
@@ -583,6 +918,7 @@ void Cmd_allocate(char *trozos[]){
             return;
         }
 
+
     //allocate -shared
         //(Comando que permite conectar nuestra shell a un segmento de memoria compartida)
 
@@ -714,10 +1050,12 @@ void Cmd_allocate(char *trozos[]){
         
         
 
-
-
-
 }
+
+
+
+
+
 
 
 //Se encarga de liberar memoria
@@ -758,9 +1096,10 @@ void Cmd_deallocate(char *trozos[]){
                     void *direccion = actual->bloque.direccion;
 
 
-                    //Liberamos la memoria y eliminamos el nodo de la lista
-                    free(direccion);
-                    eliminarBloqueMemoria(&lista,direccion);
+                    //Eliminamos el nodo de la lista y despues liberamos la memoria
+                    eliminarBloqueMemoria(&lista,direccion);    //Buscamos el nodo por su direccion y lo eliminamos de la lista
+                    free(direccion);                            //Liberamos la memoria que habiamos reservado con malloc
+                    
 
                     printf("Liberados %zu bytes de memoria\n",tamano);
                     return;
@@ -828,7 +1167,6 @@ void Cmd_deallocate(char *trozos[]){
 
 
     
-        
     //deallocate -delkey
         //(Comando que elimina un segmento de memoria compartida del sistema mediante su clave)
         
@@ -995,6 +1333,12 @@ void Cmd_deallocate(char *trozos[]){
 
         
 }
+
+
+
+
+
+
 
 //Muestra información sobre la memoria
 void Cmd_memory(char *trozos[]){

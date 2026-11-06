@@ -91,8 +91,12 @@ struct COMANDO comandos[] = {   //ponemos cada comando, su funcion y su informac
   {"allocate", Cmd_allocate, "[-malloc|-shared|-createshared|-mmap] ...\tAsigna memoria"},
   {"deallocate", Cmd_deallocate, "[-malloc|-shared|-delkey|-mmap|addr] ...\tDesasigna memoria"},
   {"memory", Cmd_memory, "[-blocks|-funcs|-vars|-all|-pmap]\tMuestra informacion de memoria"},
-  {"i-o",Cmd_io,  },
-  {"read", Cmd_read},
+  {"i-o", Cmd_io, "[read|write] [-o] fichero direccion cantidad\tLee o escribe datos entre memoria y ficheros"},
+  {"read", Cmd_read, "df direccion cantidad\tLee bytes de un descriptor y los guarda en memoria"},
+  {"write", Cmd_write, "df direccion cantidad\tEscribe bytes de memoria en un descriptor"},
+  {"memfill", Cmd_memfill, "direccion cantidad valor_hex\tRellena una zona de memoria con un byte"},
+  {"memdump", Cmd_memdump, "direccion cantidad\tMuestra el contenido de memoria en caracteres y en hexadecimal"},
+  {"recurse", Cmd_recurse, "n\tMuestra las direcciones de variables durante llamadas recursivas"},
   {NULL, NULL, NULL},  //marcamos el final de la tabla con los NULL para que sepa el bucle donde termina la tabla 
 };
 
@@ -821,6 +825,12 @@ int main () {
   InicializarAbiertos();   //metemos 0, 1 y 2 en la lista antes de empezar
 
   inicializarMemoria();   //Inicializamos la lista de bloques de memoria
+
+  //Registramos la funcion que libera la memoria al terminar la shell
+  if(atexit(liberarMemoria) != 0){                                  //atexit sirve para registrar otra funcion para ejecutarla despues de que el programa termine normalmente. En nuestro caso queremos ejcutar la funcion liberarMemoria() despues de que el usuario haga un exit o un bye
+    fprintf(stderr,"Error al registrar la limpieza de memoria\n");
+    return 1;
+  }
     
   //Bucle principal del shell (infinito: solo se sale con exit/bye, que llaman a exit(0), o con Ctrl+D)
   while (1) {
