@@ -9,5 +9,7 @@ void Cmd_memory(char *trozos[]);
 
 
 void inicializarMemoria(void);
+void Cmd_io(char *trozos[]);
+void Cmd_read(char *trozos[]);
 
 #endif

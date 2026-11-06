@@ -10,12 +10,21 @@
 #include <sys/stat.h>   // stat()
 #include <fcntl.h>      // open(), O_RDONLY y O_RDWR
 #include <unistd.h>     // close()
+#include <sys/wait.h>   // waitpid()
+
+#include <errno.h>
 
 #include "memoria.h"
 #include "listaMemoria.h"
 
 
 static ListaMemoria lista;  //static hace que lista solo sea accesible desde memoria.c
+
+
+//Variables globales con enlace externo para memory -vars
+int externa1 = 10;
+int externa2 = 20;
+int externa3;
 
 //Inicializamos la variable lista que hemos creado
 void inicializarMemoria(void){
@@ -167,7 +176,272 @@ static void *mapearFichero(char *fichero, int proteccion, int *descriptor, size_
     //Devolvvemos la direccion de la memoria mapeada
     return direccion;
 
-}   
+}
+
+
+
+//Funcion que lee bytes de un fichero y los guarda en direccion de memoria
+static ssize_t leerFichero(char *fichero, void *direccion, size_t cantidad){
+
+
+    //Declaramos variables
+    struct stat datos;
+    ssize_t leidos;
+    int fd;
+    int error;
+
+
+    //Consultamos la informacion del fichero
+    if(stat(fichero,&datos) == -1){
+        return -1;
+    }
+
+    //Abrimos el fichero en modo lectura
+    fd = open(fichero,O_RDONLY);
+
+    if(fd == -1){
+        return -1;
+    }
+
+
+    //Si no se indica cantidad, leeremos el fichero completo
+    if (cantidad == (size_t) -1) {
+
+        cantidad = (size_t) datos.st_size;
+    }
+
+    //Leemos los bytes y los guardamos en la direccion indicada
+    leidos = read(fd, direccion, cantidad);
+
+    if (leidos == -1) {
+        error = errno;
+        close(fd);
+        errno = error;
+        return -1;
+    }
+
+    //Cerramos el fichero
+    close(fd);
+
+    return leidos;
+}
+
+
+//Funcion que escribe bytes de memoria en un fichero
+static ssize_t escribirFichero(char *fichero, void *direccion,size_t cantidad, int sobrescribir) {
+
+    int fd;
+    int flags;
+    ssize_t escritos;
+    int error;
+
+
+    //Creamos el fichero solo si no existe
+    flags = O_WRONLY | O_CREAT | O_EXCL;
+
+    //Con -o permitimos sobrescribir un fichero existente
+    if (sobrescribir) {
+        flags = O_WRONLY | O_CREAT | O_TRUNC;
+    }
+
+    //Abrimos el fichero con los permisos indicados
+    fd = open(fichero, flags, 0666);
+
+
+    if (fd == -1) {
+
+        return -1;
+    }
+
+
+    //Escribimos los bytes de memoria en el fichero
+    escritos = write(fd, direccion, cantidad);
+
+    if (escritos == -1) {
+        error = errno;
+        close(fd);
+        errno = error;
+        return -1;
+    }
+
+    //Cerramos el fichero
+    if (close(fd) == -1) {
+
+        return -1;
+    }
+
+    return escritos;
+}
+
+
+
+//Comando i-o
+    //Permite leer o escribir datos entre ficheros y memoria
+
+    void Cmd_io(char *trozos[]) {
+
+    
+        if (trozos[1] != NULL && strcmp(trozos[1], "read") == 0) {
+
+            //Declaramos variables
+            char *fichero;
+            void *direccion = NULL;
+            size_t cantidad = (size_t) -1;
+            ssize_t leidos;
+
+            
+            if (trozos[2] == NULL || trozos[3] == NULL) {
+
+                printf("Uso: i-o read fichero direccion [cantidad]\n");
+                return;
+            }
+
+           fichero = trozos[2];
+
+            //Convertimos la direccion escrita a un puntero
+
+            if (sscanf(trozos[3], "%p", &direccion) != 1) {
+
+                printf("Direccion de memoria no valida\n");
+                return;
+            }
+
+
+            //Si el usuario indica cantidad, la convertimos a numero
+            if (trozos[4] != NULL) {
+
+                cantidad = strtoull(trozos[4], NULL, 10);
+            }
+
+
+            //Leemos el fichero utilizando la funcion
+            leidos = leerFichero(fichero, direccion, cantidad);
+
+
+            if (leidos == -1) {
+
+                perror("Error al leer el fichero");
+                return;
+            }
+
+            printf("Leidos %zd bytes de %s en %p\n",leidos, fichero, direccion);
+            return;
+    }
+
+    //i-o write
+        //Escribe en un fichero los bytes almacenados en memoria
+
+        if (trozos[1] != NULL && strcmp(trozos[1], "write") == 0) {
+
+        char *fichero;
+        void *direccion = NULL;
+        size_t cantidad;
+        ssize_t escritos;
+        int sobrescribir = 0;
+        int posicion = 2;
+
+        //Comprobamos si el usuario ha indicado la opcion -o
+        if (trozos[2] != NULL && strcmp(trozos[2], "-o") == 0) {
+
+            sobrescribir = 1;
+            posicion = 3;
+        }
+
+        //Comprobamos que se hayan indicado todos los parametros
+        if (trozos[posicion] == NULL || trozos[posicion + 1] == NULL || trozos[posicion + 2] == NULL) {
+
+            printf("Uso: i-o write [-o] fichero direccion cantidad\n");
+            return;
+        }
+
+
+        fichero = trozos[posicion];
+
+        //Convertimos la direccion escrita por el usuario a un puntero
+        if (sscanf(trozos[posicion + 1], "%p", &direccion) != 1) {
+
+            printf("Direccion de memoria no valida\n");
+            return;
+        }
+
+
+        //Convertimos la cantidad de bytes a un numero
+        cantidad = strtoull(trozos[posicion+2], NULL, 10);
+
+
+        //Escribimos los datos en el fichero 
+        escritos = escribirFichero(fichero, direccion, cantidad, sobrescribir);
+
+        if (escritos == -1) {
+
+            perror("Error al escribir el fichero");
+            return;
+        }
+
+        printf("Escritos %zd bytes en %s desde %p\n",escritos, fichero, direccion);
+
+        return;
+        }
+
+    printf("Opcion de i-o no reconocida\n");
+}
+
+
+
+    //Comando read
+        //Lee bytes de un descriptor abierto y los guarda en memoria
+
+        void Cmd_read(char *trozos[]) {
+
+            int descriptor;
+            void *direccion = NULL;
+            size_t cantidad;
+            ssize_t leidos;
+            char *fin;
+
+            
+            if (trozos[1] == NULL || trozos[2] == NULL || trozos[3] == NULL) {
+
+                printf("Uso: read descriptor direccion cantidad\n");
+                return;
+            }
+
+            //Convertimos el descriptor a un numero entero
+            descriptor = (int) strtol(trozos[1], &fin, 10);
+
+            if (*fin != '\0' || descriptor < 0) {
+
+                printf("Descriptor no valido\n");
+                return;
+            }
+
+            //Convertimos la direccion de texto a un puntero
+            if (sscanf(trozos[2], "%p", &direccion) != 1) {
+
+                printf("Direccion de memoria no valida\n");
+                return;
+
+
+            }
+
+            
+            cantidad = strtoull(trozos[3], NULL, 10);
+
+
+            //Leemos desde el descriptor directamente a memoria
+            leidos = read(descriptor, direccion, cantidad);
+
+
+            if (leidos == -1) {
+
+                perror("Error al leer del descriptor");
+                return;
+            }
+
+    printf("Leidos %zd bytes del descriptor %d en %p\n",leidos, descriptor, direccion);
+
+    
+}
 
 
 
@@ -655,12 +929,140 @@ void Cmd_deallocate(char *trozos[]){
         }
 
 
+    //deallocate direccion
+        //Comando que permite liberar un bloque de memoria indicando directamente su direccion
+        
+        if (trozos[1] != NULL && trozos[1][0] != '-'){  //COmprobamos que existe un argumento y que el primer caracter de este no sea un guion
+
+            void *direccion = NULL;
+            NodoMemoria *actual;
+
+        
+            //Convertimos el texto en una direccion
+            if(sscanf(trozos[1], "%p",&direccion) != 1){        //sscanf lee datos de una cadena y los convierte a otro tipo. %p es que queremos leer un puntero
+                printf("Direccion de memoria no valida\n");
+                return;
+            }
+
+            //Buscamos el bloque correspondiente en la lista
+            actual = buscarBloqueMemoria(&lista,direccion);
+
+            //Si no se encuentra el bloque mandamos un error
+            if (actual == NULL){
+                printf("No se encontro ningun bloque en esa direccion\n");
+                return;
+            }
+
+            //Comprobamos si es memoria malloc
+            if(strcmp(actual->bloque.tipo,"malloc") == 0){
+                free(direccion);                 //Liberamos la memoria reservada
+            }
+
+            //Comprobamos si es memoria compartida
+            else if(strcmp(actual->bloque.tipo,"shared") == 0){
+
+                if(shmdt(direccion) == -1){     //Desconectamos la memoria compartida del proceso
+                    perror("Error al desconectar la memoria compartida");
+                    return;
+                }
+            }
+
+            //Comprobamos si es memoria mmap
+            else if (strcmp(actual->bloque.tipo,"mmap") ==  0){
+
+                if(munmap(direccion, actual->bloque.tamano) == -1){     //Deshacemos el mapeo del fichero de memoria
+                    perror("Error al desmapear el fichero");
+                    return;
+                }
+
+                if(close(actual->bloque.descriptor) == -1){             //Cerramos el descriptor del fichero
+                    perror("Error al cerrar el fichero");
+                }
+            }
+
+
+            else{
+                printf("Tipo de memoria desconocido\n");
+                return;
+            }
+
+
+            eliminarBloqueMemoria(&lista,direccion);
+
+            printf("Bloque de memoria en %p liberado\n",direccion);
+            return;
+        }
+
         
 }
 
 //Muestra información sobre la memoria
 void Cmd_memory(char *trozos[]){
 
+    //memory -all
+        //Comando que muestra los bloques las funciones y las variables
+
+        if (trozos[1] != NULL && strcmp(trozos[1],"-all") == 0){
+
+
+            char *argsBlocks[] = {"memory", "-blocks",NULL};
+            char *argsFuncs[] = {"memory", "-funcs",NULL};
+            char *argsVars[] = {"memory", "-vars",NULL};
+
+
+
+            printf("\n---- BLOQUES DE MEMORIA -----\n");
+            Cmd_memory(argsBlocks);
+
+            printf("\n---- FUNCIONES-----\n");
+            Cmd_memory(argsFuncs);
+
+            printf("\n---- VARIABLES -----\n");
+            Cmd_memory(argsVars);
+
+
+
+            return;
+        }
+
+
+    //memory -pmap
+        //Muestra el mapa de la memoria de nuestro proceso
+        
+        if (trozos[1] != NULL && strcmp(trozos[1], "-pmap") == 0) {
+
+            pid_t pid;      //Variable donde guardamos el identificador del proceso hijo
+            char elpid[32]; //Cadena de caractere donde guardamos el PID de nuestra shell
+
+            //Obtenemos el PID de nuestra shell
+            snprintf(elpid,sizeof(elpid),"%d", (int) getpid());
+
+            //Creamos un proceso hijo
+            pid = fork();           //fork crea un proceso hijo
+
+            if (pid == -1){
+                perror("Error al crear el proceso");
+                return;
+            }
+
+            if (pid == 0){
+
+
+                //Intentamos ejecutar pmap
+                char *argsPmap[] = {"pmap",elpid,NULL};
+                execvp(argsPmap[0],argsPmap);                   //execvp ejecuta un programa externo
+
+
+                perror("No se pudo ejecutar ninguna herramienta del mapa de memoria");
+                _exit(1);
+
+            }
+
+            //El proceso padre espera a que termine el hijo
+            waitpid(pid,NULL,0);
+
+
+        }
 
     //memory -blocks
 
@@ -668,7 +1070,105 @@ void Cmd_memory(char *trozos[]){
         
             mostrarBloquesMemoria(&lista);
             return; 
-        }   
+        }
+        
+
+    //memory -funcs
+        //Comando que muestra las direcciones de 3 funciones de la shell y 3 de la biblioteca
+        
+        if (trozos[1] != NULL && strcmp(trozos[1],"-funcs") == 0){
+
+            printf("Funciones de la shell:\n"); //Identificamos cada funcion  y convertimos su direccion al tipo de puntero que espera %p en nuestro entorno
+
+            printf("Cmd_allocate:   %p\n", (void *) Cmd_allocate);
+            printf("Cmd_deallocate: %p\n", (void *) Cmd_deallocate);
+            printf("Cmd_memory:     %p\n", (void *) Cmd_memory);
+
+
+            printf("\nFunciones de la biblioteca C:\n");
+
+            printf("printf: %p\n", (void *) printf);
+            printf("malloc: %p\n", (void *) malloc);
+            printf("free:   %p\n", (void *) free);
+
+
+            return;
+
+
+        }
+
+
+    //memory -vars    
+        //Comando que muestra la direccion de variables automaticas, estaticas y externas
+
+        if (trozos[1] != NULL && strcmp(trozos[1], "-vars") == 0){
+
+
+            //Variables autmaticas inicializadas
+            int automatica1 = 1;
+            int automatica2 = 2;
+            int automatica3 = 3;
+
+
+            //Variables automaticas sin inicializar
+            int automatica4;
+            int automatica5;
+            int automatica6;
+
+
+            //Variables estaticas inicializadas
+            static int estatica1 = 10;
+            static int estatica2 = 20;
+            static int estatica3 = 30;
+
+
+            //Variables estaticas sin inicializar
+            static int estatica4;
+            static int estatica5;
+            static int estatica6;
+
+
+            printf("Variables automaticas inicializadas:\n");
+
+            printf("automatica1: %p\n", (void *) &automatica1);
+            printf("automatica2: %p\n", (void *) &automatica2);
+            printf("automatica3: %p\n", (void *) &automatica3);
+
+
+    
+            printf("\nVariables automaticas sin inicializar:\n");
+
+            printf("automatica4: %p\n", (void *) &automatica4);
+            printf("automatica5: %p\n", (void *) &automatica5);
+            printf("automatica6: %p\n", (void *) &automatica6);
+
+
+
+            printf("\nVariables estaticas inicializadas:\n");
+
+            printf("estatica1: %p\n", (void *) &estatica1);
+            printf("estatica2: %p\n", (void *) &estatica2);
+            printf("estatica3: %p\n", (void *) &estatica3);
+
+
+
+            printf("\nVariables estaticas sin inicializar:\n");
+
+            printf("estatica4: %p\n", (void *) &estatica4);
+            printf("estatica5: %p\n", (void *) &estatica5);
+            printf("estatica6: %p\n", (void *) &estatica6);
+
+
+
+            printf("\nVariables externas:\n");
+
+            printf("externa1: %p\n", (void *) &externa1);
+            printf("externa2: %p\n", (void *) &externa2);
+            printf("externa3: %p\n", (void *) &externa3);
+
+            return;
+
+        }
 
 
 

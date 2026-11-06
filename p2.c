@@ -91,7 +91,9 @@ struct COMANDO comandos[] = {   //ponemos cada comando, su funcion y su informac
   {"allocate", Cmd_allocate, "[-malloc|-shared|-createshared|-mmap] ...\tAsigna memoria"},
   {"deallocate", Cmd_deallocate, "[-malloc|-shared|-delkey|-mmap|addr] ...\tDesasigna memoria"},
   {"memory", Cmd_memory, "[-blocks|-funcs|-vars|-all|-pmap]\tMuestra informacion de memoria"},
-  {NULL, NULL, NULL}  //marcamos el final de la tabla con los NULL para que sepa el bucle donde termina la tabla 
+  {"i-o",Cmd_io,  },
+  {"read", Cmd_read},
+  {NULL, NULL, NULL},  //marcamos el final de la tabla con los NULL para que sepa el bucle donde termina la tabla 
 };
 
 
